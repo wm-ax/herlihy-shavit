@@ -1,8 +1,7 @@
 // 2840
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::sync::mpsc::{Sender};
-use std::sync::mpsc;
 use std::time;
 use std::sync::atomic::{AtomicBool, Ordering};
 use rand::rngs::ThreadRng;
@@ -12,42 +11,47 @@ use try_lock::TryLock;
 // starvation-free version
     // each phil has a left and a right can.
     // each time he eats, he knocks over his own left and right cans, and sets up the right, left cans of his left, right neighbors (in that order)
-// To see that this is starvation free, suppose that p1 finishes eating for the last time at t.
-// first note that the following holds of all philosophers:
-// (*) it is always true that at some time in the future, his right can will be in a different state from his right neighbor's left can, and likewise with left, right reversed.
-// suppose that somebody has eaten for the last time.
-// then, the cans must look like this (WLOG):
-// 01 01 00 10 10
-// the last can to be set must be somebody's left can.
-// ...could that happen?  hmm
+// To see that this is starvation free, first note that the array of cans is synchronized, so that no philosopher's sequence of four can manipulations is ever interleaved with another.  It follows that:
+// (*) when no such sequence is taking place, any two adjacent cans of two different philosophers must be in different states.
 
+// Now, suppose that p2 knocks over his cans for the last time at t.  Then at t, the cans must look like this:
+// ?? ?1 00 1? ??
+// If both p1 and p3 eat after t, then both of p2's cans will be set, and he will eat again.  So suppose, WLOG, that p3 does not eat after p2 does.  Then, at least one of p3's cans must be unset; so at t, the cans must actually look like this:
+// ?? ?1 00 10 ??
+// By (*), in fact we have
+// ?? ?1 00 10 1?
+// But if p4 eats after t, then p4 will reset p3's can and p3 will eat after t, a contradiction.  so p4 does not eat after t.  so still at t, we must have 
+// ?? ?1 00 10 10
+// and by the same reasoning we must have, still at t
+// 10 ?1 00 10 10
+// again by (*), p1's left can must be set
+// 10 11 00 10 10
+// so that p1 will eat after t.  Then p1 will reset p0's can and p0 will eat after t, a contradition.
 
 
 const TABLE_SIZE: usize = 5;
-const STARVATION_FREE: bool = false;
+const STARVATION_FREE: bool = true;
 
 pub fn dine(duration: u64, num_reports: u64) {
     let mut state_receivers = Vec::new();
     let chopsticks = (0..TABLE_SIZE).map(
         |_| Arc::new(TryLock::new(Chopstick))).collect::<Vec<_>>();
-    let cans = (0..TABLE_SIZE).map(
-        |_| [Arc::new(AtomicBool::new(true)),
-             Arc::new(AtomicBool::new(true)),]).collect::<Vec<_>>();
+    // let cans = (0..TABLE_SIZE).map(
+    //     |_| [Arc::new(AtomicBool::new(true)),
+    //          Arc::new(AtomicBool::new(true)),]).collect::<Vec<_>>();
+    let schedule = Arc::new(Mutex::new([[true, true]; TABLE_SIZE]));
     let stopped = Arc::new(AtomicBool::new(false));
     let philosophers : Vec<_> = (0..TABLE_SIZE).map(|id| {
         let chopsticks = [chopsticks[id].clone(),
                           chopsticks[(id + 1) % TABLE_SIZE].clone()];
-        let own_cans = [cans[id][0].clone(), cans[id][1].clone()];
-        let left_neighbor = (id + (TABLE_SIZE - 1)) % TABLE_SIZE;
-        let right_neighbor = (id + 1) % TABLE_SIZE;
-        let neighbor_cans = [cans[left_neighbor][0].clone(),
-                             cans[right_neighbor][1].clone()];
+        let scheduler = Scheduler {id: id,
+                                   schedule: schedule.clone()};
         let stopped = stopped.clone();
-        let (sender, receiver) = mpsc::channel();
-        state_receivers.push(receiver);
+        let (state_tx, state_rx) = mpsc::channel();
+        state_receivers.push(state_rx);
         thread::spawn(|| {
             let mut philosopher =
-                Philosopher::new(chopsticks, stopped, own_cans, neighbor_cans, sender);
+                Philosopher::new(chopsticks, scheduler, stopped, state_tx);
             philosopher.dine();
         })
     }).collect();
@@ -68,10 +72,9 @@ pub fn dine(duration: u64, num_reports: u64) {
 struct Philosopher {
     chopsticks: [Arc<TryLock<Chopstick>>; 2],
     state: State,
-    cans: [Arc<AtomicBool>; 2],
-    neighbor_cans: [Arc<AtomicBool>; 2],
+    scheduler: Scheduler,
     timer: Timer,
-    sender: Sender<State>,
+    state_tx: Sender<State>,
     amount_eaten: u64,
     stopped: Arc<AtomicBool>,
 }
@@ -80,25 +83,18 @@ struct Philosopher {
 impl Philosopher {
 
     fn new(chopsticks: [Arc<TryLock<Chopstick>>; 2],
+           scheduler: Scheduler,
            stopped: Arc<AtomicBool>,
-           cans: [Arc<AtomicBool>; 2],
-           neighbor_cans: [Arc<AtomicBool>; 2],
-           sender: Sender<State>) -> Self {
+           state_tx: Sender<State>) -> Self {
         Philosopher {
-            state: State::Thinking,
+            scheduler,
+            state_tx,
+            stopped,
             chopsticks: chopsticks.clone(),
-            cans: cans.clone(),
-            neighbor_cans: neighbor_cans.clone(),
+            state: State::Thinking,
             timer: Timer::new(),
-            sender: sender,
             amount_eaten: 0,
-            stopped: stopped.clone(),
         }
-    }
-
-    pub fn signal_done(&mut self) {
-        self.cans.iter().for_each(|c|c.store(false, Ordering::SeqCst));
-        self.neighbor_cans.iter().for_each(|c|c.store(true, Ordering::SeqCst));
     }
 
     pub fn dine(&mut self) {
@@ -130,12 +126,12 @@ impl Philosopher {
         match chopsticks {
             Some(_) => {
                 self.state = State::Eating;
-                self.sender.send(self.state).unwrap();
+                self.state_tx.send(self.state).unwrap();
                 let amount = self.timer.sleep_random();
                 self.amount_eaten += amount;
-                self.cans.iter().for_each(|c|c.store(false, Ordering::SeqCst));
-                self.neighbor_cans.iter().for_each(|c|c.store(true, Ordering::SeqCst));
-                // self.signal_done();
+                // self.cans.iter().for_each(|c|c.store(false, Ordering::SeqCst));
+                // self.neighbor_cans.iter().for_each(|c|c.store(true, Ordering::SeqCst));
+                self.scheduler.signal_done();
             },
             _ => {},
         }
@@ -143,24 +139,52 @@ impl Philosopher {
 
     fn think(&mut self) {
         self.state = State::Thinking;
-        self.sender.send(self.state).unwrap();
+        self.state_tx.send(self.state).unwrap();
         self.timer.sleep_random();
     }
 
     fn wait(&mut self) {
         self.state = State::Waiting;
-        self.sender.send(self.state).unwrap();
+        self.state_tx.send(self.state).unwrap();
     }
 
     fn may_eat(&self) -> bool {
         !STARVATION_FREE || 
-            self.cans.iter()
-            .map(|c|c.load(Ordering::SeqCst))
-            .all(|b|b)
+            self.scheduler.permits_eating()
     }
 
     fn is_done(&self) -> bool {
         self.stopped.load(Ordering::SeqCst)
+    }
+
+}
+
+
+struct Scheduler {
+    id: usize,
+    schedule: Arc<Mutex<[[bool; 2]; TABLE_SIZE]>>,
+}
+
+impl Scheduler {
+    fn signal_done(&self) {
+        let mut schedule = self.schedule.lock().unwrap();
+        let left_neighbor = (self.id + (TABLE_SIZE - 1)) % TABLE_SIZE;
+        let right_neighbor = (self.id + 1) % TABLE_SIZE;
+        let mut neighbor_cans = [schedule[left_neighbor][0],
+                                 schedule[right_neighbor][1]];
+        schedule[self.id] = [false, false];
+        schedule[left_neighbor][1] = true;
+        schedule[right_neighbor][0] = true;
+        // println!("Signal done for {}. schedule = {:?}", self.id, schedule);
+    }
+    fn permits_eating(&self) -> bool {
+        let schedule = self.schedule.lock().unwrap();
+        let cans = schedule[self.id];
+        let ret = cans[0] && cans[1];
+        // if ret {
+        //     println!("philosopher {} had to wait", self.id);
+        // }
+        ret
     }
 
 }
