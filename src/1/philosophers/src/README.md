@@ -12,7 +12,7 @@ Now, suppose, for example, that p2 eats only finitely many times.  Then there mu
 
 ?? ?1 00 1? ??
 
-If both p1 and p3 eat after t, then both of p2's cans will be set, and he will eat again.  So suppose, WLOG, that p3 does not eat after p2 does.  Then, at least one of p3's cans must be unset; so at t, the cans must actually look like this:
+If both p1 and p3 eat after t, then both of p2's cans will be set, and he will eat again.  So suppose, WLOG, that p3 does not eat after t.  Then, at least one of p3's cans must be unset; so at t, the cans must actually look like this:
 
 ?? ?1 00 10 ??
 
@@ -28,8 +28,4 @@ and by the same reasoning we must have, still at t
 
 10 ?1 00 10 10
 
-again by (D), p1's left can must be set
-
-10 11 00 10 10
-
-so that p1 will eat after t.  Then p1 will reset p0's can and p0 will eat after t, a contradition.
+Again by (D), p1's left can must be set; but since p0 does not eat after t, p1 must not eat either.  So, p1's right can must be unset at t.  This contradicts our conclusion that his right can is set at t.
