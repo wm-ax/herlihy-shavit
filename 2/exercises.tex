@@ -1,0 +1,61 @@
+\paragraph{9.} Define r-bounded waiting for a given mutual exclusion algorithm to
+mean that if ${D^j}_A \to {D^k}_B$ then ${CS^j}_A \to {CS^{k+r}}_B$. 
+Is there a way to define a doorway for the Peterson algorithm such that it provides $r$-bounded waiting for some value of $r$?
+
+No: between one thread's write to \textsc{victim} on line 9 and its read of \textsc{victim} on line 10, there is no bound on the number of times another thread may execute its critical section.
+
+\paragraph{10.} Suppose that in the definition of fairness, we replace the reference to ``doorway'' with a reference to the initial instruction $I$ of the lock method.  We thus get
+\begin{itemize}
+\item[] A lock is \emph{first-come-first-served-1} if, whenever thread $A$ finishes $I$ before thread $B$ starts $I$, then $A$ cannot be overtaken by $B$.  
+\end{itemize}
+I will argue that \emph{no} lock method can be first-come-first-served-1, because one thread can always ``overtake'' another.  
+
+More precisely, let's write ${I_A}^k$ for the time interval of $A$'s $k$th execution of $I$, and similarly write ${I_B}^k$.  I will also write $X\hookrightarrow Y$ to mean that $X\to Y$, but also that no instruction were executed in between. 
+Because $I_A$ and $I_B$ are discrete operations, it should be possible that ${I_A}^j\hookrightarrow {I_B}^k$.
+Suppose that it is possible that ${I_A}^j\hookrightarrow {I_B}^k$ and ${CS_A}^j\to {CS_B}^k$ (and similarly possible with $A, B$ everywhere interchanged). I will argue that it must then also be possible that ${I_A}^j\to {I_B}^k$ while ${CS_B}^k\to {CS_A}^j$.
+
+To this end, I will assume the following: (*) if the state of the machine following ${I_A}^j\hookrightarrow {I_B}^k$ is the same as the state of the machine following ${I_B}^k\hookrightarrow {I_A}^j$, then it is possible for either thread to overtake the other.  
+
+If $I$ is a read, then it is clear that the machine state following ${I_A}^j\hookrightarrow {I_B}^k$ is the same as the machine state following ${I_B}^k\hookrightarrow {I_A}^j$.  So by (*), $B$ can overtake $A$.
+
+On the other hand, suppose that $I$ is a write.  Let's use $L_A(I)$ to denote the location addressed by thread $A$ in executing $I$, and likewise for $L_B(I)$.  Now the problem splits into two subcases.
+
+If $L_A(I)=L_B(I)$.  Then after $A$'s execution of $I$, thread $B$ executes $I$ as well, and also writes something to $A$.  In this way, $B$ obliterates whatever trace $A$ has left in $L_A(I)$ of having begun the lock method.  So again, $B$ cannot tell whether $A$ has entered the lock method.
+
+Finally suppose that $L_A(I)\neq L_B(I)$.  Then, the machine state following ${I_A}^j\hookrightarrow {I_B}^k$ is the same as the machine state following ${I_B}^k\hookrightarrow {I_A}^j$, so the conclusion again follows by (*).
+
+\paragraph{11.} Consider the algorithm
+
+\begin{verbatim}
+1 class Flaky implements Lock {
+2   private int turn;
+3   private boolean busy = false;
+4   public void lock() {
+5     int me = ThreadID.get();
+6     do {
+7       do {
+8         turn = me;
+9       } while (busy);
+10      busy = true;
+11    } while (turn != me);
+12   }
+13 public void unlock() {
+14   busy = false;
+15   }
+16 }
+\end{verbatim}
+
+a. Flaky does satisfy mutual exclusion.  For, suppose that $A, B$ are in the critical section simultaneously.  Without loss of generality, suppose that $A$ was the latest to read from $\textsc{Turn}$.  Since $A$ then read from this a different value than $B$ last did, $A$ must have last written to $\textsc{Turn}$ after $B$ read from it.  But then, $B$ must have last written $\textsc{Busy}$ to be true \emph{before} $A$ read busy to be false, but between $A$'s last read of $\textsc{Busy}$ and $B$'s last write to it, neither thread otherwise writes to it.  Hence, $A$ read the value true to be false, a contradiction. 
+
+b. It is not starvation free.  Immediately after $A$ writes $\textsc{Turn}$ to be $A$'s, it is possible for $B$ to run through the lock method, the critical section, and the unlock method unboundedly many times; and $A$'s progress will be blocked provided it is unlucky enough each time to try to read from $\textsc{Busy}$ immedately after $B$ has written it to be true.
+
+c. So, suppose that after $A$ writes $\textsc{Busy}$ to be true but before $A$ reads from $\textsc{Turn}$,  $B$ writes $\textsc{Turn}$ to be $B$'s.  Then both of $A$ and $B$ will enter their inner loops while $\textsc{Busy}$ has been set to true, and neither will make further progress.
+
+12. The Filter lock allows some threads to overtake others an arbitrary number of times.  Suppose, anyway, that there are three threads $A, B, C$.  Let $A$ first pass through its doorway at level 1.  At this point and before $A$ completes a spin cycle, the following can happen arbitrarily many times: thread $B$ then passes through the level 1 doorway, thread $C$ passes through the doorway; thread $B$ advances through to the critical section and unlocks; thread $C$ advances through to the critical section and unlocks.
+
+13. I will say that a thread $A$ \emph{passes through} a lock $L$ when $A$ has completed the $L$'s lock method but $A$ has not released $L$ (so $A$ has still flagged $L$).  I will argue that if two threads pass through $L$, then two threads also pass through some child of $L$.  To see this, note that by the mutual exclusion property of the Peterson lock, some third thread must have called the lock method of $L$.  Now, $L$ cannot be a leaf lock, because only two threads are assigned to a leaf.  Therefore, $L$ must have two children, and two of the three threads must have passed through one of them.  
+
+It follows that if two threads pass through a single lock, then the tree lock contains an infinite descending chain of locks, which is absurd.
+
+Therefore: no two threads pass through a single lock.  In particular, no two threads pass through the root lock.  However, a thread in the critical section passes through the root lock.  So, two threads cannot both be in the critical section.
+
