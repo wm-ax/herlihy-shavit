@@ -59,3 +59,4 @@ It follows that if two threads pass through a single lock, then the tree lock co
 
 Therefore: no two threads pass through a single lock.  In particular, no two threads pass through the root lock.  However, a thread in the critical section passes through the root lock.  So, two threads cannot both be in the critical section.
 
+Is a tree lock free from deadlock?  Suppose the tree lock is really deadlocked, so that at least one thread has called the main lock method, but no thread is or will be in the critical section.  Then, there must be some lock $L$ such that some thread $A$ has flagged $L$ ($n$ times for some $n>0$), but no thread will complete $L$'s lock method (for the $n$th time). At least one other thread $B$ must flag $L$, since otherwise $A$ can complete $L$'s lock method.  However, threads $A$ and $B$ cannot both be victim, and the one who is not victim will complete $L$'s lock method, a contradiction.
