@@ -186,7 +186,7 @@ So all three correctness conditions are witnessed by the following sequentializa
 
 \paragraph{28.} The reader method could issue a call to divide by zero.  The reason is that the Java memory model is not sequentially consistent.  Within the write method, a compiler optimization might reorder the assignments to $x$ and $v$.  Then, the read method may divide by zero if it is invoked after the assignment to $v$ but before the assignment to $x$.
 
-\paragraph{29.} A method is wait-free if it guarantees that every call finishes its execution in a finite number of steps.  An object $x$ is wait-free if all its methods are wait-free.
+\paragraph{29.} Amp says that a method is wait-free if it ``guarantees that every call finishes its execution in a finite number of steps.''  What I think this means is that the method guarantees that its execution will not take an infinite number of steps.
 
 Now consider property $P$ of $x$:  for every infinite history $H$ of $x$, every thread that takes an infinite number of steps in $H$ completes an infinite number of method calls.
 
@@ -194,9 +194,17 @@ I'll argue that $Px$ is equivalent to wait-freedom of $x$.
 
 In one direction, suppose that thread $A$ takes an infinite number of steps in $H$, but that $A$ completes only a finite number of method calls.  Since the steps taken in $A$ are partitioned into the method call executions, some method call execution must contain an infinite number of steps.  In that case, the object cannot be wait-free.  So wait-freedom does imply $P$.
 
-Conversely, suppose that some method call on thread $A$ in an infinite history does not finish its execution in a finite number of steps.  Then there are two possibilities.  First, the execution may continue for an infinite number of steps.  Then, no further method calls can be issued on $A$.  Second, the execution may be permanently blocked.  In this case too, no further method calls will be issued on $A$.  Assuming the history has a lower bound, and also that there is a lower bound on the duration of each method call, it follows in any case that only finitely many  method calls will be issued in $A$.  So, $P$ implies wait-freedom.
+Conversely, suppose that the execution of some method call on thread $A$ takes an infinite number of steps.  In that history, no further method calls can be completed, so the number of completed calls is finite.
+
+\paragraph{30.} An method is lock-free if it guarantees that infinitely often at least one of its calls finishes in a finite number of steps.  
+
+Is the property $P$ equivalent to lock-freedom?  No, because lock-freedom does not imply $P$.  Lock-freedom allows that thread $A$ executes the method infinitely often, while some execution of the same method on thread $B$ cycles infinitely.  In this case, the underlying object does not satisfy $P$.  
+
+Conversely, of course wait-freedom implies lock-freedom, so (by the previous exercise) $P$ imples lock-freedom too.
+
+\paragraph{31.} Consider the following rather unusual implementation of a method m. In every history, the ith time a thread calls m, the call returns after 2i steps. Is this method wait-free, bounded wait-free, or neither?
 
 
-%% \paragraph{33.} Sequential consistency is nonblocking.  Suppose that $E$ is a pending invocation in a sequentially consistent history $H$.  Then there is a total, atomic sequentialization $S$ of $H$.
 
 \end{document}
+
