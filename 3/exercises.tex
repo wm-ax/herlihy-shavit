@@ -202,8 +202,7 @@ Is the property $P$ equivalent to lock-freedom?  No, because lock-freedom does n
 
 Conversely, of course wait-freedom implies lock-freedom, so (by the previous exercise) $P$ imples lock-freedom too.
 
-\paragraph{31.} Consider the following rather unusual implementation of a method m. In every history, the ith time a thread calls m, the call returns after 2i steps. Is this method wait-free, bounded wait-free, or neither?
-
+\paragraph{31.} Suppose that in every history, the $i$th time a thread calls method $m$, the call returns after $2i$ steps. Is this method wait-free, bounded wait-free, or neither?  The method is wait-free, because after infinitely many steps, it will have been completed infinitely many times.  But it is not bounded wait-free, because for any $k$, some execution (and every subsequent one) will take more than $k$ steps.
 
 
 \end{document}
