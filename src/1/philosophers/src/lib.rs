@@ -1,4 +1,3 @@
-// 2840
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::sync::mpsc::{Sender};
@@ -8,29 +7,10 @@ use rand::rngs::ThreadRng;
 use rand::{Rng};
 use try_lock::TryLock;
 
-// starvation-free version
-    // each phil has a left and a right can.
-    // each time he eats, he knocks over his own left and right cans, and sets up the right, left cans of his left, right neighbors (in that order)
-// To see that this is starvation free, first note that the array of cans is synchronized, so that no philosopher's sequence of four can manipulations is ever interleaved with another.  It follows that:
-// (*) when no such sequence is taking place, any two adjacent cans of two different philosophers must be in different states.
-
-// Now, suppose that p2 knocks over his cans for the last time at t.  Then at t, the cans must look like this:
-// ?? ?1 00 1? ??
-// If both p1 and p3 eat after t, then both of p2's cans will be set, and he will eat again.  So suppose, WLOG, that p3 does not eat after p2 does.  Then, at least one of p3's cans must be unset; so at t, the cans must actually look like this:
-// ?? ?1 00 10 ??
-// By (*), in fact we have
-// ?? ?1 00 10 1?
-// But if p4 eats after t, then p4 will reset p3's can and p3 will eat after t, a contradiction.  so p4 does not eat after t.  so still at t, we must have 
-// ?? ?1 00 10 10
-// and by the same reasoning we must have, still at t
-// 10 ?1 00 10 10
-// again by (*), p1's left can must be set
-// 10 11 00 10 10
-// so that p1 will eat after t.  Then p1 will reset p0's can and p0 will eat after t, a contradition.
-
 
 const TABLE_SIZE: usize = 5;
 const STARVATION_FREE: bool = true;
+
 
 pub fn dine(duration: u64, num_reports: u64) {
     let mut state_receivers = Vec::new();
@@ -129,8 +109,6 @@ impl Philosopher {
                 self.state_tx.send(self.state).unwrap();
                 let amount = self.timer.sleep_random();
                 self.amount_eaten += amount;
-                // self.cans.iter().for_each(|c|c.store(false, Ordering::SeqCst));
-                // self.neighbor_cans.iter().for_each(|c|c.store(true, Ordering::SeqCst));
                 self.scheduler.signal_done();
             },
             _ => {},
